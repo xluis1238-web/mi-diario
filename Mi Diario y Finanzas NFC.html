@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mi Diario & Finanzas NFC</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js para gráficos de finanzas -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Desplazamiento suave y personalización de barra de scroll */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 9999px; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-full font-sans flex flex-col justify-between selection:bg-brand-500 selection:text-white">
+
+    <div id="toast-container" class="fixed top-4 right-4 left-4 sm:left-auto sm:w-96 z-50 space-y-2 pointer-events-none"></div>
+
+    <div id="lock-screen" class="fixed inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center p-4">
+        <div class="max-w-md w-full glass border border-slate-800 rounded-3xl p-6 sm:p-8 text-center shadow-2xl space-y-6">
+            <div class="w-16 h-16 bg-brand-600/20 text-brand-500 rounded-2xl flex items-center justify-center mx-auto ring-1 ring-brand-500/30">
+                <i data-lucide="shield-lock" class="w-8 h-8"></i>
+            </div>
+            
+            <div>
+                <h1 class="text-2xl font-bold text-white tracking-tight" id="lock-title">Acceso Protegido</h1>
+                <p class="text-xs text-slate-400 mt-1" id="lock-subtitle">Ingresa tu PIN de seguridad para acceder a tus datos</p>
+            </div>
+
+            <!-- Visual Dots for PIN -->
+            <div class="flex justify-center space-x-3 my-4" id="pin-dots">
+                <div class="w-4 h-4 rounded-full border-2 border-slate-700 pin-dot"></div>
+                <div class="w-4 h-4 rounded-full border-2 border-slate-700 pin-dot"></div>
+                <div class="w-4 h-4 rounded-full border-2 border-slate-700 pin-dot"></div>
+                <div class="w-4 h-4 rounded-full border-2 border-slate-700 pin-dot"></div>
+            </div>
+
+            <!-- PIN Keypad -->
+            <div class="grid grid-cols-3 gap-3 max-w-xs mx-auto">
+                <button onclick="appendPin('1')" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-xl font-semibold hover:bg-slate-800 active:scale-95 transition">1</button>
+                <button onclick="appendPin('2')" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-xl font-semibold hover:bg-slate-800 active:scale-95 transition">2</button>
+                <button onclick="appendPin('3')" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-xl font-semibold hover:bg-slate-800 active:scale-95 transition">3</button>
+                <button onclick="appendPin('4')" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-xl font-semibold hover:bg-slate-800 active:scale-95 transition">4</button>
+                <button onclick="appendPin('5')" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-xl font-semibold hover:bg-slate-800 active:scale-95 transition">5</button>
+                <button onclick="appendPin('6')" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-xl font-semibold hover:bg-slate-800 active:scale-95 transition">6</button>
+                <button onclick="appendPin('7')" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-xl font-semibold hover:bg-slate-800 active:scale-95 transition">7</button>
+                <button onclick="appendPin('8')" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-xl font-semibold hover:bg-slate-800 active:scale-95 transition">8</button>
+                <button onclick="appendPin('9')" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-xl font-semibold hover:bg-slate-800 active:scale-95 transition">9</button>
+                <button onclick="clearPin()" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-rose-400 font-semibold hover:bg-slate-800 active:scale-95 transition flex items-center justify-center">
+                    <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+                </button>
+                <button onclick="appendPin('0')" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-xl font-semibold hover:bg-slate-800 active:scale-95 transition">0</button>
+                <button onclick="backspacePin()" class="h-14 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 hover:bg-slate-800 active:scale-95 transition flex items-center justify-center">
+                    <i data-lucide="delete" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <header id="main-header" class="hidden sticky top-0 z-40 glass border-b border-slate-800 px-4 py-3">
+        <div class="max-w-4xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
+                    <i data-lucide="nfc" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-sm leading-tight text-slate-100">Mi Espacio NFC</h1>
+                    <p class="text-[10px] text-emerald-400 flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Seguro y Local
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <button onclick="openModal('nfc-modal')" title="Guía NFC" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 transition">
+                    <i data-lucide="qr-code" class="w-4 h-4"></i>
+                </button>
+                <button onclick="lockApp()" title="Bloquear Ahora" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-rose-400 hover:bg-slate-800 transition">
+                    <i data-lucide="lock" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main id="main-app" class="hidden flex-1 max-w-4xl w-full mx-auto p-4 pb-24 space-y-6">
+
+        <!-- Navigation Tabs -->
+        <div class="flex bg-slate-900/80 p-1 rounded-2xl border border-slate-800/80 text-xs font-medium">
+            <button onclick="switchTab('finanzas')" id="tab-btn-finanzas" class="tab-btn flex-1 py-2.5 rounded-xl transition flex items-center justify-center gap-2 bg-brand-600 text-white shadow-sm">
+                <i data-lucide="wallet" class="w-4 h-4"></i> Finanzas
+            </button>
+            <button onclick="switchTab('diario')" id="tab-btn-diario" class="tab-btn flex-1 py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200">
+                <i data-lucide="book-open" class="w-4 h-4"></i> Diario
+            </button>
+            <button onclick="switchTab('analitica')" id="tab-btn-analitica" class="tab-btn flex-1 py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200">
+                <i data-lucide="bar-chart-3" class="w-4 h-4"></i> Resumen
+            </button>
+            <button onclick="switchTab('ajustes')" id="tab-btn-ajustes" class="tab-btn flex-1 py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200">
+                <i data-lucide="settings" class="w-4 h-4"></i> Ajustes
+            </button>
+        </div>
+
+        <!-- SECCIÓN 1: FINANZAS Y AHORROS -->
+        <section id="sec-finanzas" class="tab-content space-y-6">
+            <!-- Key Balance Cards Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="bg-gradient-to-br from-slate-900 to-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-4 opacity-10 text-emerald-500">
+                        <i data-lucide="circle-dollar-sign" class="w-16 h-16"></i>
+                    </div>
+                    <span class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Balance Actual</span>
+                    <h2 class="text-2xl font-bold text-white mt-1" id="stat-balance">$0.00</h2>
+                    <p class="text-[11px] text-slate-500 mt-2 flex items-center gap-1">
+                        <i data-lucide="scale" class="w-3 h-3"></i> Ingresos vs Gastos
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-emerald-400 uppercase tracking-wider font-semibold">Ingresos</span>
+                        <div class="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                            <i data-lucide="trending-up" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <h2 class="text-xl font-bold text-emerald-400 mt-2" id="stat-income">$0.00</h2>
+                    <p class="text-[11px] text-slate-500 mt-1">Total registrado</p>
+                </div>
+
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-rose-400 uppercase tracking-wider font-semibold">Gastos</span>
+                        <div class="w-7 h-7 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center">
+                            <i data-lucide="trending-down" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <h2 class="text-xl font-bold text-rose-400 mt-2" id="stat-expense">$0.00</h2>
+                    <p class="text-[11px] text-slate-500 mt-1">Total egresos</p>
+                </div>
+            </div>
+
+            <!-- Savings Goal Progress Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                            <i data-lucide="piggy-bank" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-sm text-slate-100">Meta de Ahorro</h3>
+                            <p class="text-xs text-slate-400" id="savings-subtitle">Objetivo personal</p>
+                        </div>
+                    </div>
+                    <button onclick="openSavingsModal()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg transition border border-slate-700">
+                        Configurar
+                    </button>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs font-semibold">
+                        <span class="text-slate-400">Ahorrado: <span id="savings-current" class="text-amber-400">$0.00</span></span>
+                        <span class="text-slate-400">Meta: <span id="savings-target" class="text-slate-200">$0.00</span></span>
+                    </div>
+                    <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
+                        <div id="savings-bar" class="h-full bg-gradient-to-r from-amber-500 to-emerald-400 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <p class="text-right text-[11px] text-slate-400" id="savings-percentage">0% completado</p>
+                </div>
+            </div>
+
+            <!-- Transaction Actions & History -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+                        <i data-lucide="list" class="w-4 h-4 text-brand-500"></i> Movimientos Recientes
+                    </h3>
+                    <button onclick="openModal('transaction-modal')" class="bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-lg shadow-brand-500/20">
+                        <i data-lucide="plus" class="w-4 h-4"></i> Añadir
+                    </button>
+                </div>
+
+                <div id="transactions-list" class="space-y-2.5">
+                    <!-- Dynamic Items -->
+                </div>
+            </div>
+        </section>
+
+        <!-- SECCIÓN 2: DIARIO PERSONAL -->
+        <section id="sec-diario" class="tab-content space-y-6 hidden">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-bold text-white">Mi Diario Personal</h2>
+                    <p class="text-xs text-slate-400">Pensamientos, notas e ideas privadas</p>
+                </div>
+                <button onclick="openModal('journal-modal')" class="bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-lg shadow-brand-500/20">
+                    <i data-lucide="square-pen" class="w-4 h-4"></i> Nueva Entrada
+                </button>
+            </div>
+
+            <!-- Search Journal -->
+            <div class="relative">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-500"></i>
+                <input type="text" id="journal-search" oninput="renderJournal()" placeholder="Buscar en mi diario..." class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500">
+            </div>
+
+            <!-- Entries List -->
+            <div id="journal-list" class="space-y-3">
+                <!-- Dynamic Journal Entries -->
+            </div>
+        </section>
+
+        <!-- SECCIÓN 3: RESUMEN Y ANALÍTICA -->
+        <section id="sec-analitica" class="tab-content space-y-6 hidden">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <h3 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+                    <i data-lucide="pie-chart" class="w-4 h-4 text-brand-500"></i> Distribución de Gastos
+                </h3>
+                <div class="h-64 flex items-center justify-center">
+                    <canvas id="expenseChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECCIÓN 4: AJUSTES Y GUÍA NFC -->
+        <section id="sec-ajustes" class="tab-content space-y-6 hidden">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <h3 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+                    <i data-lucide="key-round" class="w-4 h-4 text-brand-500"></i> Seguridad de Acceso
+                </h3>
+                <p class="text-xs text-slate-400">Puedes cambiar tu contraseña o PIN numérico en cualquier momento.</p>
+                <button onclick="changePinPrompt()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl transition text-slate-200">
+                    Cambiar mi PIN
+                </button>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <h3 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+                    <i data-lucide="database" class="w-4 h-4 text-brand-500"></i> Copia de Seguridad
+                </h3>
+                <p class="text-xs text-slate-400">Tus datos se guardan en este dispositivo. Exporta una copia para llevarla a otro teléfono o navegador.</p>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="exportData()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl transition text-slate-200 flex items-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i> Exportar JSON
+                    </button>
+                    <label class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl transition text-slate-200 flex items-center gap-2 cursor-pointer">
+                        <i data-lucide="upload" class="w-4 h-4"></i> Importar JSON
+                        <input type="file" id="import-file" onchange="importData(event)" accept=".json" class="hidden">
+                    </label>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                <h3 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+                    <i data-lucide="nfc" class="w-4 h-4 text-brand-500"></i> ¿Cómo usar esta Web con un Tag NFC?
+                </h3>
+                <p class="text-xs text-slate-400 leading-relaxed">
+                    1. Aloja este archivo HTML en un servicio gratuito como <b>GitHub Pages</b>, <b>Vercel</b> o <b>Netlify</b>.<br>
+                    2. Copia la URL de tu página web (ejemplo: <code class="bg-slate-800 px-1 py-0.5 rounded text-brand-400">https://mi-diario.vercel.app</code>).<br>
+                    3. Usa una app gratuita en tu móvil como <b>NFC Tools</b> (iOS/Android).<br>
+                    4. Selecciona <b>Escribir -> Añadir un registro -> URL / URI</b> y pega el enlace de tu web.<br>
+                    5. Toca <b>Escribir</b> y acerca tu etiqueta NFC. ¡Listo! Cada vez que acerques tu teléfono al NFC se abrirá esta aplicación automáticamente.
+                </p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal: Nueva Transacción -->
+    <div id="transaction-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-base text-white">Nuevo Movimiento</h3>
+                <button onclick="closeModal('transaction-modal')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <form id="transaction-form" onsubmit="saveTransaction(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Tipo de Operación</label>
+                    <select id="tx-type" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-500">
+                        <option value="expense">🔴 Gasto</option>
+                        <option value="income">🟢 Ingreso</option>
+                        <option value="savings">🟡 Depósito a Ahorro</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Monto ($)</label>
+                    <input type="number" step="0.01" id="tx-amount" required placeholder="0.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Categoría</label>
+                    <input type="text" id="tx-category" required placeholder="Ej: Comida, Sueldo, Ahorro mensual" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Descripción / Nota</label>
+                    <input type="text" id="tx-desc" placeholder="Detalle opcional" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-500">
+                </div>
+
+                <button type="submit" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-brand-500/20">
+                    Guardar Registro
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Nueva Entrada del Diario -->
+    <div id="journal-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-base text-white">Escribir en el Diario</h3>
+                <button onclick="closeModal('journal-modal')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <form id="journal-form" onsubmit="saveJournalEntry(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Título de la Entrada</label>
+                    <input type="text" id="j-title" required placeholder="¿Qué pasó hoy?" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Estado de Ánimo</label>
+                    <select id="j-mood" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-500">
+                        <option value="😊">😊 Feliz / Satisfecho</option>
+                        <option value="🚀">🚀 Motivado / Productivo</option>
+                        <option value="😐">😐 Normal / Tranquilo</option>
+                        <option value="😔">😔 Estresado / Cansado</option>
+                        <option value="💡">💡 Idea / Proyecto</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Contenido Privado</label>
+                    <textarea id="j-content" rows="5" required placeholder="Escribe libremente aquí..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-brand-500 resize-none"></textarea>
+                </div>
+
+                <button type="submit" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-lg shadow-brand-500/20">
+                    Guardar Entrada
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Configurar Meta de Ahorro -->
+    <div id="savings-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-base text-white">Configurar Ahorro</h3>
+                <button onclick="closeModal('savings-modal')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <form onsubmit="saveSavingsGoal(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Nombre del Objetivo</label>
+                    <input type="text" id="goal-title" required placeholder="Ej: Fondo de emergencia, Viaje" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Meta Total ($)</label>
+                    <input type="number" step="0.01" id="goal-target" required placeholder="1000.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-500">
+                </div>
+
+                <button type="submit" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-2.5 rounded-xl text-xs transition">
+                    Guardar Meta
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        /* --- ESTADO DE LA APLICACIÓN --- */
+        let state = {
+            pin: null, // Si es null, se solicita crear PIN la primera vez
+            transactions: [],
+            journal: [],
+            savingsGoal: { title: "Meta Principal", target: 1000, current: 0 }
+        };
+
+        let currentPinInput = "";
+        let isSetupMode = false;
+        let expenseChart = null;
+
+        function loadState() {
+            const saved = localStorage.getItem('nfc_app_data');
+            if (saved) {
+                try {
+                    state = JSON.parse(saved);
+                } catch (e) {
+                    console.error("Error al cargar datos", e);
+                }
+            }
+
+            if (!state.pin) {
+                isSetupMode = true;
+                document.getElementById('lock-title').innerText = "Crear Nuevo PIN";
+                document.getElementById('lock-subtitle').innerText = "Ingresa un PIN de 4 dígitos para proteger tu app";
+            } else {
+                isSetupMode = false;
+                document.getElementById('lock-title').innerText = "Acceso Protegido";
+                document.getElementById('lock-subtitle').innerText = "Ingresa tu PIN de seguridad para acceder";
+            }
+        }
+
+        function saveState() {
+            localStorage.setItem('nfc_app_data', JSON.stringify(state));
+        }
+
+        function updatePinDots() {
+            const dots = document.querySelectorAll('.pin-dot');
+            dots.forEach((dot, index) => {
+                if (index < currentPinInput.length) {
+                    dot.classList.add('bg-brand-500', 'border-brand-500');
+                } else {
+                    dot.classList.remove('bg-brand-500', 'border-brand-500');
+                }
+            });
+        }
+
+        function appendPin(digit) {
+            if (currentPinInput.length < 4) {
+                currentPinInput += digit;
+                updatePinDots();
+            }
+
+            if (currentPinInput.length === 4) {
+                setTimeout(verifyPin, 150);
+            }
+        }
+
+        function clearPin() {
+            currentPinInput = "";
+            updatePinDots();
+        }
+
+        function backspacePin() {
+            currentPinInput = currentPinInput.slice(0, -1);
+            updatePinDots();
+        }
+
+        function verifyPin() {
+            if (isSetupMode) {
+                state.pin = currentPinInput;
+                saveState();
+                showToast("PIN configurado con éxito", "success");
+                unlockApp();
+            } else {
+                if (currentPinInput === state.pin) {
+                    unlockApp();
+                } else {
+                    showToast("PIN Incorrecto", "error");
+                    clearPin();
+                }
+            }
+        }
+
+        function unlockApp() {
+            document.getElementById('lock-screen').classList.add('hidden');
+            document.getElementById('main-header').classList.remove('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            clearPin();
+            renderAll();
+        }
+
+        function lockApp() {
+            document.getElementById('lock-screen').classList.remove('hidden');
+            document.getElementById('main-header').classList.add('hidden');
+            document.getElementById('main-app').classList.add('hidden');
+            clearPin();
+            loadState();
+        }
+
+        function changePinPrompt() {
+            const oldPin = prompt("Ingresa tu PIN actual:");
+            if (oldPin === state.pin) {
+                const newPin = prompt("Ingresa tu nuevo PIN de 4 dígitos:");
+                if (newPin && newPin.length === 4 && !isNaN(newPin)) {
+                    state.pin = newPin;
+                    saveState();
+                    showToast("PIN actualizado correctamente", "success");
+                } else {
+                    showToast("El PIN debe ser numérico y tener 4 dígitos", "error");
+                }
+            } else if (oldPin !== null) {
+                showToast("PIN actual incorrecto", "error");
+            }
+        }
+
+        function showToast(message, type = "info") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const bgClass = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-brand-600';
+            toast.className = `${bgClass} text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between transition duration-300 opacity-0 transform -translate-y-2`;
+            toast.innerHTML = `<span>${message}</span>`;
+
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.remove('opacity-0', '-translate-y-2');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', '-translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-brand-600', 'text-white', 'shadow-sm');
+                btn.classList.add('text-slate-400');
+            });
+
+            document.getElementById(`sec-${tabName}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tab-btn-${tabName}`);
+            activeBtn.classList.add('bg-brand-600', 'text-white', 'shadow-sm');
+            activeBtn.classList.remove('text-slate-400');
+
+            if (tabName === 'analitica') {
+                renderCharts();
+            }
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        function saveTransaction(e) {
+            e.preventDefault();
+            const type = document.getElementById('tx-type').value;
+            const amount = parseFloat(document.getElementById('tx-amount').value);
+            const category = document.getElementById('tx-category').value.trim();
+            const desc = document.getElementById('tx-desc').value.trim();
+
+            if (isNaN(amount) || amount <= 0) {
+                showToast("Monto inválido", "error");
+                return;
+            }
+
+            const newTx = {
+                id: Date.now(),
+                type,
+                amount,
+                category,
+                desc,
+                date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+            };
+
+            state.transactions.unshift(newTx);
+
+            // Si es depósito a ahorro, sumar a la meta
+            if (type === 'savings') {
+                state.savingsGoal.current += amount;
+            }
+
+            saveState();
+            renderFinances();
+            closeModal('transaction-modal');
+            document.getElementById('transaction-form').reset();
+            showToast("Movimiento registrado", "success");
+        }
+
+        function deleteTransaction(id) {
+            state.transactions = state.transactions.filter(tx => tx.id !== id);
+            saveState();
+            renderFinances();
+            showToast("Movimiento eliminado", "info");
+        }
+
+        function openSavingsModal() {
+            document.getElementById('goal-title').value = state.savingsGoal.title;
+            document.getElementById('goal-target').value = state.savingsGoal.target;
+            openModal('savings-modal');
+        }
+
+        function saveSavingsGoal(e) {
+            e.preventDefault();
+            const title = document.getElementById('goal-title').value.trim();
+            const target = parseFloat(document.getElementById('goal-target').value);
+
+            if (isNaN(target) || target <= 0) {
+                showToast("Meta inválida", "error");
+                return;
+            }
+
+            state.savingsGoal.title = title;
+            state.savingsGoal.target = target;
+            saveState();
+            renderFinances();
+            closeModal('savings-modal');
+            showToast("Meta de ahorro actualizada", "success");
+        }
+
+        function renderFinances() {
+            let totalIncome = 0;
+            let totalExpense = 0;
+            let totalSavings = state.savingsGoal.current || 0;
+
+            state.transactions.forEach(tx => {
+                if (tx.type === 'income') totalIncome += tx.amount;
+                if (tx.type === 'expense') totalExpense += tx.amount;
+            });
+
+            const balance = totalIncome - totalExpense;
+
+            document.getElementById('stat-balance').innerText = `$${balance.toFixed(2)}`;
+            document.getElementById('stat-income').innerText = `$${totalIncome.toFixed(2)}`;
+            document.getElementById('stat-expense').innerText = `$${totalExpense.toFixed(2)}`;
+
+            // Savings UI
+            document.getElementById('savings-subtitle').innerText = state.savingsGoal.title;
+            document.getElementById('savings-current').innerText = `$${totalSavings.toFixed(2)}`;
+            document.getElementById('savings-target').innerText = `$${state.savingsGoal.target.toFixed(2)}`;
+            
+            const pct = Math.min(100, Math.round((totalSavings / state.savingsGoal.target) * 100)) || 0;
+            document.getElementById('savings-bar').style.width = `${pct}%`;
+            document.getElementById('savings-percentage').innerText = `${pct}% completado`;
+
+            // List UI
+            const listEl = document.getElementById('transactions-list');
+            if (state.transactions.length === 0) {
+                listEl.innerHTML = `<p class="text-center text-xs text-slate-500 py-6">No hay movimientos registrados aún.</p>`;
+                return;
+            }
+
+            listEl.innerHTML = state.transactions.map(tx => {
+                const isInc = tx.type === 'income';
+                const isSav = tx.type === 'savings';
+                const color = isInc ? 'text-emerald-400' : isSav ? 'text-amber-400' : 'text-rose-400';
+                const sign = isInc ? '+' : isSav ? '★' : '-';
+                const icon = isInc ? 'arrow-down-left' : isSav ? 'piggy-bank' : 'arrow-up-right';
+
+                return `
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-slate-800/50 border border-slate-800 hover:border-slate-700 transition">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center ${color}">
+                                <i data-lucide="${icon}" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-xs text-slate-200">${tx.category}</h4>
+                                <p class="text-[10px] text-slate-400">${tx.date} ${tx.desc ? '• ' + tx.desc : ''}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-xs ${color}">${sign}$${tx.amount.toFixed(2)}</span>
+                            <button onclick="deleteTransaction(${tx.id})" class="text-slate-500 hover:text-rose-400 p-1"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        function saveJournalEntry(e) {
+            e.preventDefault();
+            const title = document.getElementById('j-title').value.trim();
+            const mood = document.getElementById('j-mood').value;
+            const content = document.getElementById('j-content').value.trim();
+
+            const entry = {
+                id: Date.now(),
+                title,
+                mood,
+                content,
+                date: new Date().toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            };
+
+            state.journal.unshift(entry);
+            saveState();
+            renderJournal();
+            closeModal('journal-modal');
+            document.getElementById('journal-form').reset();
+            showToast("Entrada de diario guardada", "success");
+        }
+
+        function deleteJournalEntry(id) {
+            state.journal = state.journal.filter(j => j.id !== id);
+            saveState();
+            renderJournal();
+            showToast("Entrada eliminada", "info");
+        }
+
+        function renderJournal() {
+            const query = document.getElementById('journal-search')?.value.toLowerCase() || "";
+            const listEl = document.getElementById('journal-list');
+
+            const filtered = state.journal.filter(j => 
+                j.title.toLowerCase().includes(query) || j.content.toLowerCase().includes(query)
+            );
+
+            if (filtered.length === 0) {
+                listEl.innerHTML = `<p class="text-center text-xs text-slate-500 py-8">No hay entradas escritas en tu diario.</p>`;
+                return;
+            }
+
+            listEl.innerHTML = filtered.map(j => `
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2 hover:border-slate-700 transition">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-lg">${j.mood}</span>
+                            <h4 class="font-bold text-sm text-slate-100">${j.title}</h4>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-[10px] text-slate-500">${j.date}</span>
+                            <button onclick="deleteJournalEntry(${j.id})" class="text-slate-500 hover:text-rose-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">${j.content}</p>
+                </div>
+            `).join('');
+
+            lucide.createIcons();
+        }
+
+        function renderCharts() {
+            const ctx = document.getElementById('expenseChart').getContext('2d');
+
+            const categories = {};
+            state.transactions.filter(t => t.type === 'expense').forEach(t => {
+                categories[t.category] = (categories[t.category] || 0) + t.amount;
+            });
+
+            const labels = Object.keys(categories);
+            const data = Object.values(categories);
+
+            if (expenseChart) expenseChart.destroy();
+
+            if (labels.length === 0) {
+                return;
+            }
+
+            expenseChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: ['#f43f5e', '#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `diario_finanzas_backup_${new Date().toISOString().slice(0,10)}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast("Copia de seguridad descargada", "success");
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (imported.pin !== undefined) {
+                        state = imported;
+                        saveState();
+                        renderAll();
+                        showToast("Datos importados con éxito", "success");
+                    } else {
+                        showToast("Archivo JSON inválido", "error");
+                    }
+                } catch (err) {
+                    showToast("Error al leer el archivo", "error");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function renderAll() {
+            renderFinances();
+            renderJournal();
+            lucide.createIcons();
+        }
+
+        window.onload = function() {
+            lucide.createIcons();
+            loadState();
+        };
+    </script>
+</body>
+</html>
